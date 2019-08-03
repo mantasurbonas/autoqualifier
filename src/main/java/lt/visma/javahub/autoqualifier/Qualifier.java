@@ -15,6 +15,17 @@ import lt.visma.javahub.autoqualifier.model.ClassAnnotationLocation;
 import lt.visma.javahub.autoqualifier.model.PropertyAnnotationLocation;
 import lt.visma.javahub.utils.TextFile;
 
+/***
+ * main business logic of this tool:
+ * 
+ *  searches recursively a given source root for Java source files:
+ *  
+ * 	finds Spring @Component s, @Repository ies and @Service s without names, and creates appropriate names.
+ *  finds @Autowired fields without @Qualifier s and creates appropriately named @Qualifier annotations. 
+ * 
+ * @author mantas.urbonas
+ *
+ */
 public class Qualifier {
 
 	public enum Mode{

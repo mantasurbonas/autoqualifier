@@ -1,6 +1,7 @@
 package lt.visma.javahub.autoqualifier;
 
 import java.io.File;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -10,6 +11,13 @@ import com.github.javaparser.ast.expr.AnnotationExpr;
 
 import lt.visma.javahub.autoqualifier.model.PropertyAnnotationLocation;
 
+
+/***
+ *  collects found @Autowired fields from a Java source file. Skips the ones marked with @Qualifier() annotations. 
+ *  
+ * @author mantas.urbonas
+ *
+ */
 public class AutowiredPropertiesInspector implements JavaFilesScanner.Inspector<PropertyAnnotationLocation>{
 
 	@Override
@@ -35,6 +43,14 @@ public class AutowiredPropertiesInspector implements JavaFilesScanner.Inspector<
 		if (f == null)
 			return false;
 		
+		boolean hasQualifier = f.getAnnotations().stream()
+				.filter(a -> isQualifierAnnotation(a))
+				.findAny()
+				.isPresent();
+		
+		if (hasQualifier)
+			return false;
+		
 		return f.getAnnotations().stream()
 				.filter(a -> isAutowiredAnnotation(a))
 				.findAny()
@@ -53,4 +69,15 @@ public class AutowiredPropertiesInspector implements JavaFilesScanner.Inspector<
 		return name.startsWith("Autowired");
 	}
 
+	private static boolean isQualifierAnnotation(AnnotationExpr annotation) {
+		if (annotation == null)
+			return false;
+		
+		if (annotation.getChildNodes().size() > 1)
+			return false;
+		
+		String name = annotation.getNameAsString().trim();
+		
+		return name.startsWith("Qualifier");
+	}
 }

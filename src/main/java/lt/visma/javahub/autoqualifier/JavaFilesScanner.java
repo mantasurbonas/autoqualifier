@@ -11,6 +11,12 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.utils.SourceRoot;
 
+/***
+ * scans a files in a given root package, invokes a given analyzer on each Java class source found.
+ * @author mantas.urbonas
+ *
+ * @param <T>
+ */
 public class JavaFilesScanner <T> {
 	
 	public static interface Inspector <M>{

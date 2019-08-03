@@ -16,6 +16,10 @@ public class Kvakva {
 
     @Autowired
     private Blabla bla;
+    
+    @Autowired
+    @Qualifier("some")
+    private BlaBla dontQualifyMeRepeatedly;
 	
     private final void someMethod(String param) {
      

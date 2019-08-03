@@ -9,6 +9,12 @@ import com.github.javaparser.ast.expr.AnnotationExpr;
 
 import lt.visma.javahub.autoqualifier.model.ClassAnnotationLocation;
 
+/***
+ *  collects unnamed @Component @Repository or @Service Spring components. 
+ *  
+ * @author mantas.urbonas
+ *
+ */
 public class SpringComponentInspector implements JavaFilesScanner.Inspector<ClassAnnotationLocation>{
 
 	@Override
@@ -37,7 +43,7 @@ public class SpringComponentInspector implements JavaFilesScanner.Inspector<Clas
 			return false;
 		
 		if (annotation.getChildNodes().size() > 1)
-			return false;
+			return false; // already has name
 		
 		String name = annotation.getNameAsString().trim();
 		
