@@ -174,7 +174,7 @@ public class Qualifier {
 			if (action != null)
 				action.setFileCache(fileCache).perform();
 			
-			failed = failed && action instanceof ErrorAction;
+			failed = action instanceof ErrorAction || failed;
 		}
 		
 		if (failed)
