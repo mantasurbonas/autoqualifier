@@ -48,8 +48,8 @@ public class BService{
 
 Now Proguard obfuscation works properly, and the obfuscated files don't reveal your Spring bean names and fields.
 
-## Configuration
-This Maven config snipplet enforces random names on all @Components and all the matching Qualifier("...")s on @Autowired fields:
+
+You will need this snipplet in your Maven POM (this instructs plugin to assign random names on all @Components and all the matching Qualifier("...")s on @Autowired fields in your source code):
 
 ``` xml
 <plugins>
@@ -64,7 +64,7 @@ This Maven config snipplet enforces random names on all @Components and all the 
 </plugins>
 
 ```
-
+## Configuration
 Supported modes are:
   * **ignore** (do nothing)
   * **log** (logs all components and autowired fields found)
