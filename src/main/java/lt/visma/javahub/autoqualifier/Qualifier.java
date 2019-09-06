@@ -118,6 +118,9 @@ public class Qualifier {
 		if (mode == Mode.ignore)
 			return this;
 		
+		if (log != null)
+			log.debug("autoqualying sources ("+mode+") in directory "+rootPath);
+		
 		actions.clear();
 		
 		JavaFilesScanner javaFilesScanner = new JavaFilesScanner(rootPath);
