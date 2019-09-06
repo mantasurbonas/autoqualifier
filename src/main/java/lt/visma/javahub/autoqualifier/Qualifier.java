@@ -119,7 +119,7 @@ public class Qualifier {
 			return this;
 		
 		if (log != null)
-			log.debug("autoqualying sources ("+mode+") in directory "+rootPath);
+			log.info("autoqualifying sources ("+mode+") in directory "+rootPath);
 		
 		actions.clear();
 		
