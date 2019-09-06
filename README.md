@@ -1,6 +1,9 @@
 # Spring components auto Qualifier
 Manages @Qualifier("..") annotations for Spring @Autowired fields add names of Spring @Components, @Repositories and @Services.
 
+## Problem
+See this Stackoverflow discussion https://stackoverflow.com/questions/8970505/having-difficulties-dealing-proguard-with-spring for a problem description.
+
 ## Example
 
 Given a Java project having some @Autowired Spring components like this
