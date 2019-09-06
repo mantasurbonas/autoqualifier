@@ -1,4 +1,4 @@
-package packagehere;
+package kvapackage;
 
 import com.github.javaparser.utils.CodeGenerationUtils;
 import com.github.javaparser.utils.SourceRoot;
@@ -10,7 +10,7 @@ import com.github.javaparser.utils.SourceRoot;
  *
  */
 
-@Component()
+@Component("kvakva")
 @VeryNice
 public class Kvakva {
 
@@ -19,13 +19,13 @@ public class Kvakva {
     
     @Autowired
     @Qualifier("some")
-    private BlaBla dontQualifyMeRepeatedly;
+    private Sometype dontQualifyMeRepeatedly;
 	
     private final void someMethod(String param) {
      
     	/*** some example here */
     	
     	////
-    		// 	and here
+    	// 	and here
     }
 }

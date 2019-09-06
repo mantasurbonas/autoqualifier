@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 
 import lt.visma.javahub.autoqualifier.model.ClassAnnotationLocation;
 
@@ -32,22 +33,28 @@ public class SpringComponentInspector implements JavaFilesScanner.Inspector<Clas
 			location.setShortClassName(classDeclaration.getNameAsString());
 			location.setFullClassName(classDeclaration.getFullyQualifiedName().orElse(null));
 			location.setAnnotationName(componentAnnotation.getNameAsString());
+			location.setAnnotationValue(valueToString(componentAnnotation));
 			location.setFile(javaFile);
-			location.setLine(componentAnnotation.getBegin().get().line);
+			location.setPosition(componentAnnotation.getBegin().get());
 			
 		return Collections.singletonList(location);
+	}
+
+	private String valueToString(AnnotationExpr componentAnnotation) {
+		List<StringLiteralExpr> literals = componentAnnotation.findAll(StringLiteralExpr.class);
+		if (literals == null || literals.size() == 0)
+			return null;
+		
+		return literals.get(0).getValue();
 	}
 
 	private static boolean isComponentAnnotation(AnnotationExpr annotation) {
 		if (annotation == null)
 			return false;
 		
-		if (annotation.getChildNodes().size() > 1)
-			return false; // already has name
-		
 		String name = annotation.getNameAsString().trim();
 		
-		return name.startsWith("Component") || name.startsWith("Service") || name.startsWith("Repository");
+		return name.equals("Component") || name.equals("Service") || name.equals("Repository");
 	}
 
 }

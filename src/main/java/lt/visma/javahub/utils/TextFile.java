@@ -1,11 +1,12 @@
 package lt.visma.javahub.utils;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -102,7 +103,7 @@ public class TextFile implements AutoCloseable{
 		if (!open)
 			return this;
 		
-		try(BufferedWriter writer = new BufferedWriter(new FileWriter(file.getAbsolutePath(), false))){
+		try(Writer writer = new OutputStreamWriter(new FileOutputStream(file.getAbsolutePath()), charset)){
 			for (String line: lines)
 				writer.write(line + "\r\n");
 			

@@ -1,18 +1,27 @@
 package lt.visma.javahub.autoqualifier;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import lt.visma.javahub.autoqualifier.actions.AbstractAction;
+import lt.visma.javahub.autoqualifier.actions.ClearFieldNameAction;
+import lt.visma.javahub.autoqualifier.actions.ErrorAction;
+import lt.visma.javahub.autoqualifier.actions.LogAction;
+import lt.visma.javahub.autoqualifier.actions.SetBeanNameAction;
+import lt.visma.javahub.autoqualifier.actions.SetFieldNameAction;
+import lt.visma.javahub.autoqualifier.actions.WarningAction;
+import lt.visma.javahub.autoqualifier.model.AutowiredFieldLocation;
 import lt.visma.javahub.autoqualifier.model.ClassAnnotationLocation;
-import lt.visma.javahub.autoqualifier.model.PropertyAnnotationLocation;
 import lt.visma.javahub.utils.TextFile;
 
 /***
@@ -20,8 +29,8 @@ import lt.visma.javahub.utils.TextFile;
  * 
  *  searches recursively a given source root for Java source files:
  *  
- * 	finds Spring @Component s, @Repository ies and @Service s without names, and creates appropriate names.
- *  finds @Autowired fields without @Qualifier s and creates appropriately named @Qualifier annotations. 
+ * 	finds Spring @Component s, @Repository ies and @Service s and either creates appropriate names or erases them (as configured).
+ *  finds @Autowired fields and either creates appropriately named @Qualifier annotations or erases them (as configured). 
  * 
  * @author mantas.urbonas
  *
@@ -29,13 +38,37 @@ import lt.visma.javahub.utils.TextFile;
 public class Qualifier {
 
 	public enum Mode{
-		classname,
-		random
+		/*** do nothing */
+		ignore,
+		
+		/*** logs all components and autowired fields found */
+		log,
+		
+		/*** warn if some components are unnamed, or some autowired fields are unqualified - don't touch source files*/
+		warnUnnamed,
+		
+		/*** warn if some components are named, or some autowired fields are qualified - don't touch source files*/
+		warnNamed,
+		
+		/*** log error and stop build process if some components are unnamed, or some autowired fields are unqualified - don't touch source files*/ 
+		errorUnnamed,
+		
+		/*** log error and stop build process if some components are named, or some autowired fields are qualified - don't touch source files*/ 
+		errorNamed,
+		
+		/*** automatically name components and qualify autowired fields by dependency classname - update source files where necessary */ 
+		nameByClass,
+		
+		/*** automatically name components and qualify autowired fields by random md5 hash  - update source files where necessary */ 
+		nameRandomly,
+		
+		/*** remove names from components and autowired fields - update source files where necessary */
+		unname
 	}
 	
-	private Mode mode = Mode.random;
-
-	private Map<String, TextFile> modifiedFiles = null;
+	private Mode mode = Mode.log;
+	
+	private List<AbstractAction> actions = new ArrayList<>();
 	
 	public Qualifier() {
 	}
@@ -50,110 +83,336 @@ public class Qualifier {
 		return this;
 	}
 
-	public static List<ClassAnnotationLocation> findSpringComponents(Path rootPath) throws IOException {
-		return new JavaFilesScanner<ClassAnnotationLocation>().findAll(rootPath, new SpringComponentInspector());
+	public Qualifier clear() {
+		this.actions.clear();
+		return this;
 	}
 	
-	public static List<PropertyAnnotationLocation> findAutowiredFields(Path rootPath) throws IOException {
-		return new JavaFilesScanner<PropertyAnnotationLocation>().findAll(rootPath, new AutowiredPropertiesInspector());
+	public static List<ClassAnnotationLocation> findSpringComponents(Path rootPath) throws IOException {
+		return new JavaFilesScanner(rootPath).findAll(new SpringComponentInspector());
 	}
-
+	
+	public static List<AutowiredFieldLocation> findAutowiredFields(Path rootPath) throws IOException {
+		return new JavaFilesScanner(rootPath).findAll(new AutowiredPropertiesInspector());
+	}
+	
 	public Qualifier reviewSources(String rootPath) throws IOException {
 		return reviewSources(Paths.get(rootPath));
 	}
 	
 	public Qualifier reviewSources(Path rootPath) throws IOException {
-		List<ClassAnnotationLocation> springComponentLocations = findSpringComponents(rootPath);
+		if (mode == Mode.ignore)
+			return this;
+		
+		actions.clear();
+		
+		JavaFilesScanner javaFilesScanner = new JavaFilesScanner(rootPath);
+		
+		List<ClassAnnotationLocation> springComponentLocations = javaFilesScanner.findAll(new SpringComponentInspector());
+		List<AutowiredFieldLocation> autowiredFieldsLocations = javaFilesScanner.findAll(new AutowiredPropertiesInspector());
+		
+		switch(mode) {
+			
+		case log:
+			actions.addAll(logComponents(springComponentLocations));
+			actions.addAll(logFields(autowiredFieldsLocations));
+		
+		case warnUnnamed:
+		case warnNamed:
+			actions.addAll(warnComponentsComply(springComponentLocations, mode));
+			actions.addAll(warnFieldsComply(autowiredFieldsLocations, mode));
+			return this;
 
-		System.out.println("these Spring components were found: ");
-		for(ClassAnnotationLocation location: springComponentLocations)
-			System.out.println(location);
+		case errorUnnamed:
+		case errorNamed:
+			actions.addAll(assertComponentsComply(springComponentLocations, mode));
+			actions.addAll(assertFieldsComply(autowiredFieldsLocations, mode));
+			return this;
+			
+		case nameByClass:
+		case nameRandomly:
+			Map<String, String> beanNameMap = createNameMap(springComponentLocations, mode);
+			
+			actions.addAll(nameSpringComponents(springComponentLocations, beanNameMap));
+			actions.addAll(qualifyAutowiredFields(autowiredFieldsLocations, beanNameMap));	
+			return this;
+			
+		case unname:
+			actions.addAll(unnameSpringComponents(springComponentLocations));
+			actions.addAll(unqualifyAutowiredFields(autowiredFieldsLocations));	
+			return this;
+			
+		default:
+			throw new RuntimeException("unrecognized mode : "+mode);
+		}
+	}
+	
+	public Qualifier executeActions() throws Exception{	
 		
-		System.out.println("bean name map created: ");
-		Map<String, String> beanNameMap = createNameMap(springComponentLocations);
-		System.out.println(beanNameMap);
+		Map<String, TextFile> fileCache = new HashMap<>();
 		
-		List<PropertyAnnotationLocation> autowiredFieldsLocations = findAutowiredFields(rootPath);
+		boolean failed = false;
 		
-		System.out.println("autowired fields were found: ");
-		for(PropertyAnnotationLocation location: autowiredFieldsLocations)
-			System.out.println(location);
+		for (AbstractAction action: actions) {
+			if (action != null)
+				action.setFileCache(fileCache).perform();
+			
+			failed = failed && action instanceof ErrorAction;
+		}
 		
-		this.modifiedFiles = new HashMap<>();
+		if (failed)
+			throw new RuntimeException("failed due to the errors above.");
 		
-		nameSpringComponents(springComponentLocations, beanNameMap);
-		
-		qualifyAutowiredFields(autowiredFieldsLocations, beanNameMap);
-		
-		saveSourceFiles();
+		saveSourceFiles(fileCache.values());
 		
 		return this;
 	}
 
-	private void nameSpringComponents(List<ClassAnnotationLocation> springComponents, Map<String, String> beanNameMap) throws IOException {
-		for(ClassAnnotationLocation componentLocation: springComponents) {
-			File componentFile = componentLocation.getFile();
-			String newQualifier = beanNameMap.get(componentLocation.getShortClassName());
-			if (newQualifier == null || newQualifier.isEmpty()) {
-				System.out.println("Warning: name not found for component "+componentLocation);
-				return;
-			}
-				
-			String newAnnotation = "@" + componentLocation.getAnnotationName() + "(\"" + newQualifier + "\")";
-			
-			getSourceFile(componentFile)
-				.replaceLine(componentLocation.getLine()-1, newAnnotation);
-		}
+	public List<AbstractAction> getActions() {
+		return actions;
 	}
 
-	private void qualifyAutowiredFields(List<PropertyAnnotationLocation> fields, Map<String, String> beanNameMap) throws IOException {
-		for(PropertyAnnotationLocation field: fields) {
-			
-			String fieldType = field.getPropertyClass();
-			String newQualifier = beanNameMap.get(fieldType);
-			if (newQualifier == null || newQualifier.trim().isEmpty()) {
-				System.out.println("Warning: no qualifier known for field "+field);
-				continue;
-			}
-			
-			getSourceFile(field.getFile())
-				.appendText(field.getLine()-1, " @Qualifier(\""+newQualifier+"\")");
-		}
-	}
-
-	private Map<String, String> createNameMap(List<ClassAnnotationLocation> springComponentLocations) {
-		if (mode == Mode.random)
+	
+	private static Map<String, String> createNameMap(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
 			return springComponentLocations.stream()
 				.collect( Collectors.toMap ( l -> l.getShortClassName(), 
-										     l -> hash(l.getFullClassName())) );
+										     l -> getQualifierName(mode, l) ) );
+	}
+	
+	
+	private static List<AbstractAction> logComponents(List<ClassAnnotationLocation> springComponentLocations) {
+		if (springComponentLocations.isEmpty())
+			return Collections.singletonList(new LogAction("no Spring components found"));
 		
-		if (mode == Mode.classname)
-			return springComponentLocations.stream()
-					.collect( Collectors.toMap ( l -> l.getShortClassName(), 
-											     l -> l.getShortClassName()) );
+		return springComponentLocations.stream()
+				.map(location -> logSpringComponent(location))
+				.collect(Collectors.toList());
+	}
+	
+	private static List<AbstractAction> logFields(List<AutowiredFieldLocation> autowiredFieldsLocations) {
+		if (autowiredFieldsLocations.isEmpty())
+			return Collections.singletonList(new LogAction("no Spring components found"));
 		
-		throw new RuntimeException("mode not specified: must be either 'random' or 'classname'");
+		return autowiredFieldsLocations.stream()
+				.map(location -> logAutowiredField(location))
+				.collect(Collectors.toList());
+	}
+	
+	private static List<AbstractAction> warnComponentsComply(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
+		return springComponentLocations.stream()
+				.map(component -> warnComponentComplies(component, mode))
+				.filter(action -> action != null)
+				.collect(Collectors.toList());
+	}
+	
+	private static List<AbstractAction> warnFieldsComply(List<AutowiredFieldLocation> autowiredFieldsLocations, Mode mode) {
+		return autowiredFieldsLocations.stream()
+				.map( location -> warnFieldComplies(location, mode))
+				.filter( action -> action != null)
+				.collect(Collectors.toList());
 	}
 
-	private TextFile getSourceFile(File file) throws IOException {
-		String key = file.getAbsolutePath();
-		
-		TextFile src = modifiedFiles.get(key);
-		if (src == null) {
-			src = new TextFile(file);
-			modifiedFiles.put(key, src);
-		}
-		
-		return src;
+	private static List<AbstractAction> assertComponentsComply(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
+		return springComponentLocations.stream()
+				.map( location -> assertComponentComplies(location, mode))
+				.filter( action -> action != null)
+				.collect(Collectors.toList());
+	}
+	
+	private static List<AbstractAction> assertFieldsComply(List<AutowiredFieldLocation> autowiredFieldsLocations, Mode mode) {
+		return autowiredFieldsLocations.stream()
+				.map( location -> assertFieldComplies(location, mode))
+				.filter(action -> action != null)
+				.collect(Collectors.toList());
 	}
 
-	private void saveSourceFiles() {
-		for (Map.Entry<String, TextFile> file: modifiedFiles.entrySet()) {
+	private static List<AbstractAction> nameSpringComponents(List<ClassAnnotationLocation> springComponents, Map<String, String> beanNameMap) throws IOException {
+		return springComponents.stream()
+					.map(component -> assignNameToSpringComponent(component, beanNameMap))
+					.filter(action -> action != null)
+					.collect(Collectors.toList());
+	}
+
+	private static List<AbstractAction> qualifyAutowiredFields(List<AutowiredFieldLocation> fields, Map<String, String> beanNameMap) throws IOException {
+		return fields.stream()
+					.map(field -> assignNameToAutowiredProperty(field, beanNameMap))
+					.filter(action -> action != null)
+					.collect(Collectors.toList());
+	}
+
+	private static List<AbstractAction> unnameSpringComponents(List<ClassAnnotationLocation> springComponents) throws IOException {
+		return springComponents.stream()
+					.map(component -> unnameSpringComponent(component))
+					.filter(a -> a != null)
+					.collect(Collectors.toList());
+	}
+
+	private static List<AbstractAction> unqualifyAutowiredFields(List<AutowiredFieldLocation> fields) throws IOException {
+		return fields.stream()
+					.map(field -> unnameAutowiredProperty(field))
+					.filter(a -> a != null)
+					.collect(Collectors.toList());
+	}
+	
+	private static LogAction logSpringComponent(ClassAnnotationLocation location) {
+		return new LogAction(location.getAnnotationName()
+							+ quote(location.getAnnotationValue())
+							+ " in "
+							+ location.getFullClassName());
+	}
+
+	private static LogAction logAutowiredField(AutowiredFieldLocation location) {
+		return new LogAction("@Autowired"
+							+ quote(location.getPropertyQualifier())
+							+ " "
+							+ location.getPropertyClass()
+							+ " in "
+							+ location.getFile().getName() );
+	}
+	
+	private static AbstractAction assignNameToSpringComponent(ClassAnnotationLocation location, Map<String, String> beanNameMap) {
+		if (isNamed(location))
+			return null;
+		
+		String newQualifier = beanNameMap.get(location.getShortClassName());
+		
+		if (newQualifier == null || newQualifier.trim().isEmpty())
+			return new ErrorAction()
+							.setSourceFile(location.getFile())
+							.setMessage("name not found for component "+location.getShortClassName());
 			
-			System.out.println("saving file "+file.getKey());
-			
-			file.getValue().save().close();
-		}
+		return new SetBeanNameAction()	
+							.setSourceFile(location.getFile())
+							.setBeanName(newQualifier)
+							.setAnnotationName(location.getAnnotationName())
+							.setPosition(location.getPosition());
+	}
+
+	private static AbstractAction assignNameToAutowiredProperty(AutowiredFieldLocation field, Map<String, String> beanNameMap)  {
+		if (isNamed(field))
+			return null;
+		
+		String fieldType = field.getPropertyClass();
+		String newQualifier = beanNameMap.get(fieldType);
+		
+		if (newQualifier == null || newQualifier.trim().isEmpty())
+			return new ErrorAction()
+							.setSourceFile(field.getFile())
+							.setMessage("no qualifier known for a field of type "+field.getPropertyClass());
+		
+		return new SetFieldNameAction()
+							.setPropertyName(newQualifier)
+							.setSourceFile(field.getFile())
+							.setPosition(field.getAutowiredBegin());
+	}
+
+	private static AbstractAction unnameSpringComponent(ClassAnnotationLocation componentLocation) {
+		if (!isNamed(componentLocation))
+			return null;
+		
+		return new SetBeanNameAction()	
+							.setSourceFile(componentLocation.getFile())
+							.setBeanName(null)
+							.setAnnotationName(componentLocation.getAnnotationName())
+							.setPosition(componentLocation.getPosition() );
+	}
+
+	private static AbstractAction unnameAutowiredProperty(AutowiredFieldLocation field)  {
+		if (!isNamed(field))
+			return null;
+		
+		return new ClearFieldNameAction()
+							.setSourceFile(field.getFile())
+							.setLocation(field.getQualifierBegin(), field.getQualifierEnd());
+	}
+	
+	private static AbstractAction warnComponentComplies(ClassAnnotationLocation location, Mode mode) {
+		if (complies(location, mode))
+			return null;
+		
+		return new WarningAction()
+					.setMessage((isNamed(location)?"named":"unnamed") 
+								+ " component: "
+								+ location.getFullClassName())
+					.setSourceFile(location.getFile());
+	}
+	
+	private static AbstractAction warnFieldComplies(AutowiredFieldLocation location, Mode mode) {
+		if (complies(location, mode))
+			return null;
+		
+		return new WarningAction()
+				.setMessage((isNamed(location)?"named":"unnamed")
+							+ " field: "
+						    + location.getPropertyClass())
+				.setSourceFile(location.getFile());
+	}
+
+	private static AbstractAction assertComponentComplies(ClassAnnotationLocation location, Mode mode) {
+		if (complies(location, mode))
+			return null;
+		
+		return new ErrorAction()
+					.setMessage((isNamed(location)?"named":"unnamed")
+								+ " component: "
+								+ location.getFullClassName())
+					.setSourceFile(location.getFile());
+	}
+
+	private static AbstractAction assertFieldComplies(AutowiredFieldLocation location, Mode mode) {
+		if (complies(location, mode))
+			return null;
+		
+		return new ErrorAction()
+				.setMessage((isNamed(location)?"named":"unnamed")
+							+ " field: "
+							+ location.getPropertyClass())
+				.setSourceFile(location.getFile());
+	}
+
+	private static String getQualifierName(Mode mode, ClassAnnotationLocation annotation) {
+		if (mode == Mode.nameRandomly)
+			return hash(annotation.getFullClassName());
+		
+		if (mode == Mode.nameByClass)
+			return annotation.getShortClassName();
+		
+		throw new RuntimeException("mode not specified: must be either 'nameRandomly' or 'nameByClass'");
+	}
+
+	private static void saveSourceFiles(Collection<TextFile> modifiedFiles) {
+		for (TextFile file: modifiedFiles) 
+			file
+				.save()
+				.close();
+	}
+
+	private static boolean complies(AutowiredFieldLocation location, Mode mode) {
+		if (mode == Mode.errorNamed || mode == Mode.warnNamed)
+			return ! isNamed(location);
+		
+		if (mode == Mode.errorUnnamed || mode == Mode.warnUnnamed)
+			return isNamed(location);
+		
+		return true;
+	}
+
+	private static boolean complies(ClassAnnotationLocation location, Mode mode) {
+		if (mode == Mode.errorNamed || mode == Mode.warnNamed)
+			return ! isNamed(location);
+		
+		if (mode == Mode.errorUnnamed || mode == Mode.warnUnnamed)
+			return isNamed(location);
+		
+		return true;
+	}
+	
+	private static boolean isNamed(ClassAnnotationLocation location) {
+		return !empty(location.getAnnotationValue());
+	}
+
+	private static boolean isNamed(AutowiredFieldLocation location) {
+		return !empty(location.getPropertyQualifier());
 	}
 	
 	private static String hash(String str) {
@@ -171,4 +430,15 @@ public class Qualifier {
 		}
 	}
 	
+	private static String quote(String str) {
+		if (empty(str))
+			return "";
+		
+		return "(\""+str+"\")";
+	}
+	
+	private static boolean empty(String value) {
+		return value == null || value.trim().isEmpty();
+	}
+
 }
