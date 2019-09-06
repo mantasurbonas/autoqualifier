@@ -9,11 +9,6 @@ public class Main {
 	private static final String MODE_KEY = "-mode";
 
 	public static void main(String []s) throws Exception {
-		//Path where = CodeGenerationUtils.mavenModuleRoot(Main.class).resolve("src/test/resources");
-		// Paths.get("C:\\work\\src\\github\\objectFlowsSample\\src\\main\\java");
-		
-		//new Qualifier().setMode(Mode.random).reviewSources(where);
-		
 		if (s.length != 4) {
 			printUsage(s);
 			return;
@@ -42,11 +37,17 @@ public class Main {
 			
 		System.out.println("Autoqualifying Spring beans in "+mode+" mode within directory ["+file.getAbsolutePath()+"]");
 		
-		new Qualifier().setMode(mode).reviewSources(sourcePath);
+		new Qualifier()
+				.setMode(mode)
+				.reviewSources(sourcePath)
+				.executeActions();
 	}
 
 	private static void printUsage(String [] actualParams) {
-		System.err.println("Usage: java -jar autoqualifier.jar "+ MODE_KEY + " [classname|random] "+ SOURCEROOT_KEY+ " /full/path/to/source/root");
+		System.err.println("Usage: java -jar autoqualifier.jar "
+							+ MODE_KEY + " <log|warnUnnamed|warnNamed|errorUnnamed|errorNamed|nameByClass|nameRandomly|unname> "
+							+ SOURCEROOT_KEY+ " </full/path/to/source/root>");
+		
 		System.err.println("Your parameters: "+Arrays.asList(actualParams));
 	}
 	
