@@ -1,5 +1,6 @@
 package lt.visma.javahub.autoqualifier;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -12,6 +13,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import org.apache.maven.plugin.logging.Log;
 
 import lt.visma.javahub.autoqualifier.actions.AbstractAction;
 import lt.visma.javahub.autoqualifier.actions.ClearFieldNameAction;
@@ -70,6 +73,8 @@ public class Qualifier {
 	
 	private List<AbstractAction> actions = new ArrayList<>();
 	
+	private Log log;
+	
 	public Qualifier() {
 	}
 	
@@ -83,6 +88,11 @@ public class Qualifier {
 		return this;
 	}
 
+	public Qualifier setLog(Log log) {
+		this.log = log;
+		return this;
+	}
+	
 	public Qualifier clear() {
 		this.actions.clear();
 		return this;
@@ -98,6 +108,10 @@ public class Qualifier {
 	
 	public Qualifier reviewSources(String rootPath) throws IOException {
 		return reviewSources(Paths.get(rootPath));
+	}
+	
+	public Qualifier reviewSources(File rootPath) throws IOException {
+		return reviewSources(rootPath.toPath());
 	}
 	
 	public Qualifier reviewSources(Path rootPath) throws IOException {
@@ -180,60 +194,60 @@ public class Qualifier {
 	}
 	
 	
-	private static List<AbstractAction> logComponents(List<ClassAnnotationLocation> springComponentLocations) {
+	private List<AbstractAction> logComponents(List<ClassAnnotationLocation> springComponentLocations) {
 		if (springComponentLocations.isEmpty())
-			return Collections.singletonList(new LogAction("no Spring components found"));
+			return Collections.singletonList(new LogAction("no Spring components found").setLog(log));
 		
 		return springComponentLocations.stream()
 				.map(location -> logSpringComponent(location))
 				.collect(Collectors.toList());
 	}
 	
-	private static List<AbstractAction> logFields(List<AutowiredFieldLocation> autowiredFieldsLocations) {
+	private List<AbstractAction> logFields(List<AutowiredFieldLocation> autowiredFieldsLocations) {
 		if (autowiredFieldsLocations.isEmpty())
-			return Collections.singletonList(new LogAction("no Spring components found"));
+			return Collections.singletonList(new LogAction("no autowired fields found").setLog(log));
 		
 		return autowiredFieldsLocations.stream()
 				.map(location -> logAutowiredField(location))
 				.collect(Collectors.toList());
 	}
 	
-	private static List<AbstractAction> warnComponentsComply(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
+	private List<AbstractAction> warnComponentsComply(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
 		return springComponentLocations.stream()
 				.map(component -> warnComponentComplies(component, mode))
 				.filter(action -> action != null)
 				.collect(Collectors.toList());
 	}
 	
-	private static List<AbstractAction> warnFieldsComply(List<AutowiredFieldLocation> autowiredFieldsLocations, Mode mode) {
+	private List<AbstractAction> warnFieldsComply(List<AutowiredFieldLocation> autowiredFieldsLocations, Mode mode) {
 		return autowiredFieldsLocations.stream()
 				.map( location -> warnFieldComplies(location, mode))
 				.filter( action -> action != null)
 				.collect(Collectors.toList());
 	}
 
-	private static List<AbstractAction> assertComponentsComply(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
+	private List<AbstractAction> assertComponentsComply(List<ClassAnnotationLocation> springComponentLocations, Mode mode) {
 		return springComponentLocations.stream()
 				.map( location -> assertComponentComplies(location, mode))
 				.filter( action -> action != null)
 				.collect(Collectors.toList());
 	}
 	
-	private static List<AbstractAction> assertFieldsComply(List<AutowiredFieldLocation> autowiredFieldsLocations, Mode mode) {
+	private List<AbstractAction> assertFieldsComply(List<AutowiredFieldLocation> autowiredFieldsLocations, Mode mode) {
 		return autowiredFieldsLocations.stream()
 				.map( location -> assertFieldComplies(location, mode))
 				.filter(action -> action != null)
 				.collect(Collectors.toList());
 	}
 
-	private static List<AbstractAction> nameSpringComponents(List<ClassAnnotationLocation> springComponents, Map<String, String> beanNameMap) throws IOException {
+	private List<AbstractAction> nameSpringComponents(List<ClassAnnotationLocation> springComponents, Map<String, String> beanNameMap) throws IOException {
 		return springComponents.stream()
 					.map(component -> assignNameToSpringComponent(component, beanNameMap))
 					.filter(action -> action != null)
 					.collect(Collectors.toList());
 	}
 
-	private static List<AbstractAction> qualifyAutowiredFields(List<AutowiredFieldLocation> fields, Map<String, String> beanNameMap) throws IOException {
+	private List<AbstractAction> qualifyAutowiredFields(List<AutowiredFieldLocation> fields, Map<String, String> beanNameMap) throws IOException {
 		return fields.stream()
 					.map(field -> assignNameToAutowiredProperty(field, beanNameMap))
 					.filter(action -> action != null)
@@ -254,23 +268,25 @@ public class Qualifier {
 					.collect(Collectors.toList());
 	}
 	
-	private static LogAction logSpringComponent(ClassAnnotationLocation location) {
+	private LogAction logSpringComponent(ClassAnnotationLocation location) {
 		return new LogAction(location.getAnnotationName()
 							+ quote(location.getAnnotationValue())
 							+ " in "
-							+ location.getFullClassName());
+							+ location.getFullClassName())
+						.setLog(log);
 	}
 
-	private static LogAction logAutowiredField(AutowiredFieldLocation location) {
+	private LogAction logAutowiredField(AutowiredFieldLocation location) {
 		return new LogAction("@Autowired"
 							+ quote(location.getPropertyQualifier())
 							+ " "
 							+ location.getPropertyClass()
 							+ " in "
-							+ location.getFile().getName() );
+							+ location.getFile().getName() )
+					.setLog(log);
 	}
 	
-	private static AbstractAction assignNameToSpringComponent(ClassAnnotationLocation location, Map<String, String> beanNameMap) {
+	private AbstractAction assignNameToSpringComponent(ClassAnnotationLocation location, Map<String, String> beanNameMap) {
 		if (isNamed(location))
 			return null;
 		
@@ -279,7 +295,8 @@ public class Qualifier {
 		if (newQualifier == null || newQualifier.trim().isEmpty())
 			return new ErrorAction()
 							.setSourceFile(location.getFile())
-							.setMessage("name not found for component "+location.getShortClassName());
+							.setMessage("name not found for component "+location.getShortClassName())
+							.setLog(log);
 			
 		return new SetBeanNameAction()	
 							.setSourceFile(location.getFile())
@@ -288,7 +305,7 @@ public class Qualifier {
 							.setPosition(location.getPosition());
 	}
 
-	private static AbstractAction assignNameToAutowiredProperty(AutowiredFieldLocation field, Map<String, String> beanNameMap)  {
+	private AbstractAction assignNameToAutowiredProperty(AutowiredFieldLocation field, Map<String, String> beanNameMap)  {
 		if (isNamed(field))
 			return null;
 		
@@ -298,7 +315,8 @@ public class Qualifier {
 		if (newQualifier == null || newQualifier.trim().isEmpty())
 			return new ErrorAction()
 							.setSourceFile(field.getFile())
-							.setMessage("no qualifier known for a field of type "+field.getPropertyClass());
+							.setMessage("no qualifier known for a field of type "+field.getPropertyClass())
+							.setLog(log);
 		
 		return new SetFieldNameAction()
 							.setPropertyName(newQualifier)
@@ -326,7 +344,7 @@ public class Qualifier {
 							.setLocation(field.getQualifierBegin(), field.getQualifierEnd());
 	}
 	
-	private static AbstractAction warnComponentComplies(ClassAnnotationLocation location, Mode mode) {
+	private AbstractAction warnComponentComplies(ClassAnnotationLocation location, Mode mode) {
 		if (complies(location, mode))
 			return null;
 		
@@ -334,21 +352,23 @@ public class Qualifier {
 					.setMessage((isNamed(location)?"named":"unnamed") 
 								+ " component: "
 								+ location.getFullClassName())
-					.setSourceFile(location.getFile());
+					.setSourceFile(location.getFile())
+					.setLog(log);
 	}
 	
-	private static AbstractAction warnFieldComplies(AutowiredFieldLocation location, Mode mode) {
+	private AbstractAction warnFieldComplies(AutowiredFieldLocation location, Mode mode) {
 		if (complies(location, mode))
 			return null;
 		
 		return new WarningAction()
-				.setMessage((isNamed(location)?"named":"unnamed")
-							+ " field: "
-						    + location.getPropertyClass())
-				.setSourceFile(location.getFile());
+					.setMessage((isNamed(location)?"named":"unnamed")
+								+ " field: "
+							    + location.getPropertyClass())
+					.setSourceFile(location.getFile())
+					.setLog(log);
 	}
 
-	private static AbstractAction assertComponentComplies(ClassAnnotationLocation location, Mode mode) {
+	private AbstractAction assertComponentComplies(ClassAnnotationLocation location, Mode mode) {
 		if (complies(location, mode))
 			return null;
 		
@@ -356,18 +376,20 @@ public class Qualifier {
 					.setMessage((isNamed(location)?"named":"unnamed")
 								+ " component: "
 								+ location.getFullClassName())
-					.setSourceFile(location.getFile());
+					.setSourceFile(location.getFile())
+					.setLog(log);
 	}
 
-	private static AbstractAction assertFieldComplies(AutowiredFieldLocation location, Mode mode) {
+	private AbstractAction assertFieldComplies(AutowiredFieldLocation location, Mode mode) {
 		if (complies(location, mode))
 			return null;
 		
 		return new ErrorAction()
-				.setMessage((isNamed(location)?"named":"unnamed")
-							+ " field: "
-							+ location.getPropertyClass())
-				.setSourceFile(location.getFile());
+					.setMessage((isNamed(location)?"named":"unnamed")
+								+ " field: "
+								+ location.getPropertyClass())
+					.setSourceFile(location.getFile())
+					.setLog(log);
 	}
 
 	private static String getQualifierName(Mode mode, ClassAnnotationLocation annotation) {
