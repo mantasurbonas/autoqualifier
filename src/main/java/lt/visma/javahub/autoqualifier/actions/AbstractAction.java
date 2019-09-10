@@ -8,25 +8,25 @@ import lt.visma.javahub.utils.TextFile;
 
 public abstract class AbstractAction {
 
-	protected Map<String, TextFile> fileCache;
+    protected Map<String, TextFile> fileCache;
 
-	public abstract void perform() throws Exception;
+    public abstract void perform() throws Exception;
 
-	public AbstractAction setFileCache(Map<String, TextFile> fc) {
-		this.fileCache = fc;
-		return this;
-	}
-	
-	protected TextFile getFile(File sourceFile) throws IOException {
-		String key = sourceFile.getAbsolutePath();
-		
-		TextFile src = fileCache.get(key);
-		if (src == null) {
-			src = new TextFile(sourceFile);
-			fileCache.put(key, src);
-		}
-		
-		return src;
-	}
-	
+    public AbstractAction setFileCache(Map<String, TextFile> fc) {
+        this.fileCache = fc;
+        return this;
+    }
+    
+    protected TextFile getFile(File sourceFile) throws IOException {
+        String key = sourceFile.getAbsolutePath();
+        
+        TextFile src = fileCache.get(key);
+        if (src == null) {
+            src = new TextFile(sourceFile);
+            fileCache.put(key, src);
+        }
+        
+        return src;
+    }
+    
 }

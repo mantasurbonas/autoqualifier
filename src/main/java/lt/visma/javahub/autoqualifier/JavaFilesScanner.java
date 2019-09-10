@@ -18,20 +18,20 @@ import com.github.javaparser.utils.SourceRoot;
  * @param <T>
  */
 public class JavaFilesScanner {
-	
-	private SourceRoot sourceRoot;
-	private File rootPath;
+    
+    private SourceRoot sourceRoot;
+    private File rootPath;
 
-	public static interface Inspector <M>{
-		public List<M> inspect(ClassOrInterfaceDeclaration classDeclaration, File javaFile);
-	}
-	
-	public JavaFilesScanner (Path rootPath){
-		this.sourceRoot = new SourceRoot(rootPath);
-		this.rootPath = rootPath.toFile();
-	}
+    public static interface Inspector <M>{
+        public List<M> inspect(ClassOrInterfaceDeclaration classDeclaration, File javaFile);
+    }
+    
+    public JavaFilesScanner (Path rootPath){
+        this.sourceRoot = new SourceRoot(rootPath);
+        this.rootPath = rootPath.toFile();
+    }
 
-	public <T> List<T> findAll(Inspector<T> analyzer) throws IOException {   	
+    public <T> List<T> findAll(Inspector<T> analyzer) throws IOException {      
         List<T> ret = new ArrayList<>();
         String currentPackage= "";
         
@@ -39,30 +39,30 @@ public class JavaFilesScanner {
         
         return ret;
     }
-	
-	private <T> void scanRecursively(File rootPath, String currentPackage, Inspector<T> analyzer, List<T> results) throws IOException {
-    	File javaFiles[] = rootPath.listFiles(f -> ! f.isDirectory() && f.getName().endsWith(".java"));
-    	scanJavaFiles(currentPackage, javaFiles, analyzer, results);
+    
+    private <T> void scanRecursively(File rootPath, String currentPackage, Inspector<T> analyzer, List<T> results) throws IOException {
+        File javaFiles[] = rootPath.listFiles(f -> ! f.isDirectory() && f.getName().endsWith(".java"));
+        scanJavaFiles(currentPackage, javaFiles, analyzer, results);
 
-    	if (!currentPackage.isEmpty())
-    		currentPackage = currentPackage + ".";
-    	
-    	File subfolders[] = rootPath.listFiles(f -> f.isDirectory() );
-    	for (File subfolder: subfolders) 
-    		scanRecursively(subfolder, currentPackage+subfolder.getName().toString(), analyzer, results);
-	}
+        if (!currentPackage.isEmpty())
+            currentPackage = currentPackage + ".";
+        
+        File subfolders[] = rootPath.listFiles(f -> f.isDirectory() );
+        for (File subfolder: subfolders) 
+            scanRecursively(subfolder, currentPackage+subfolder.getName().toString(), analyzer, results);
+    }
 
-	private <T> void scanJavaFiles(String currentPackage, File[] javaFiles, Inspector<T> analyzer, List<T> results) {
-		for (File javaFile: javaFiles) {
-			CompilationUnit cu = sourceRoot.parse(currentPackage, javaFile.getName());
-			
-		    results.addAll(cu
-		    		.findAll(ClassOrInterfaceDeclaration.class)
-		    		.stream()
-		    		.map(c -> analyzer.inspect(c, javaFile))
-		    		.flatMap(List::stream)
-		    		.collect(Collectors.toList()));
-		}
-	}
+    private <T> void scanJavaFiles(String currentPackage, File[] javaFiles, Inspector<T> analyzer, List<T> results) {
+        for (File javaFile: javaFiles) {
+            CompilationUnit cu = sourceRoot.parse(currentPackage, javaFile.getName());
+            
+            results.addAll(cu
+                    .findAll(ClassOrInterfaceDeclaration.class)
+                    .stream()
+                    .map(c -> analyzer.inspect(c, javaFile))
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList()));
+        }
+    }
 
 }
