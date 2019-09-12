@@ -34,8 +34,8 @@ public class AutoqualifierMojo extends AbstractMojo {
 			new Qualifier()
 				.setMode(mode)
 				.setLog(getLog())
-				.reviewSources(srcDirectory)
-				.executeActions();
+				.analyzeCodebase(srcDirectory)
+				.applyActions();
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new MojoExecutionException(e.getMessage());

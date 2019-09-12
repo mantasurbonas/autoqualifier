@@ -1,7 +1,7 @@
 package lt.visma.javahub.autoqualifier;
 
 import java.io.File;
-import java.io.IOException;
+import java.io.FileFilter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,13 +14,14 @@ import com.github.javaparser.utils.SourceRoot;
 /***
  * scans a files in a given root package, invokes a given analyzer on each Java class source found.
  * @author mantas.urbonas
- *
- * @param <T>
  */
 public class JavaFilesScanner {
     
     private SourceRoot sourceRoot;
     private File rootPath;
+    
+    private static final FileFilter JAVA_FILES_FILTER = file -> ! file.isDirectory() && file.getName().endsWith(".java");
+    private static final FileFilter DIRECTORIES_FILTER = file -> file.isDirectory();
 
     public static interface Inspector <M>{
         public List<M> inspect(ClassOrInterfaceDeclaration classDeclaration, File javaFile);
@@ -31,7 +32,7 @@ public class JavaFilesScanner {
         this.rootPath = rootPath.toFile();
     }
 
-    public <T> List<T> findAll(Inspector<T> analyzer) throws IOException {      
+    public <T> List<T> findAll(Inspector<T> analyzer) {      
         List<T> ret = new ArrayList<>();
         String currentPackage= "";
         
@@ -40,16 +41,20 @@ public class JavaFilesScanner {
         return ret;
     }
     
-    private <T> void scanRecursively(File rootPath, String currentPackage, Inspector<T> analyzer, List<T> results) throws IOException {
-        File javaFiles[] = rootPath.listFiles(f -> ! f.isDirectory() && f.getName().endsWith(".java"));
+    private <T> void scanRecursively(File rootPath, String currentPackage, Inspector<T> analyzer, List<T> results) {
+		File javaFiles[] = rootPath.listFiles(JAVA_FILES_FILTER);
+        
+        if (javaFiles == null)
+        	return; // throw new RuntimeException("not a directory "+rootPath);
+        
         scanJavaFiles(currentPackage, javaFiles, analyzer, results);
 
         if (!currentPackage.isEmpty())
             currentPackage = currentPackage + ".";
         
-        File subfolders[] = rootPath.listFiles(f -> f.isDirectory() );
+		File subfolders[] = rootPath.listFiles(DIRECTORIES_FILTER );
         for (File subfolder: subfolders) 
-            scanRecursively(subfolder, currentPackage+subfolder.getName().toString(), analyzer, results);
+            scanRecursively(subfolder, currentPackage+subfolder.getName(), analyzer, results);
     }
 
     private <T> void scanJavaFiles(String currentPackage, File[] javaFiles, Inspector<T> analyzer, List<T> results) {

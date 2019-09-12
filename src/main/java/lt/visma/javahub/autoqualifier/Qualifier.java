@@ -1,7 +1,6 @@
 package lt.visma.javahub.autoqualifier;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
@@ -98,23 +97,23 @@ public class Qualifier {
         return this;
     }
     
-    public static List<ClassAnnotationLocation> findSpringComponents(Path rootPath) throws IOException {
+    public static List<ClassAnnotationLocation> findSpringComponents(Path rootPath) {
         return new JavaFilesScanner(rootPath).findAll(new SpringComponentInspector());
     }
     
-    public static List<AutowiredFieldLocation> findAutowiredFields(Path rootPath) throws IOException {
+    public static List<AutowiredFieldLocation> findAutowiredFields(Path rootPath) {
         return new JavaFilesScanner(rootPath).findAll(new AutowiredPropertiesInspector());
     }
     
-    public Qualifier reviewSources(String rootPath) throws IOException {
-        return reviewSources(Paths.get(rootPath));
+    public Qualifier analyzeCodebase(String rootPath) {
+        return analyzeCodebase(Paths.get(rootPath));
     }
     
-    public Qualifier reviewSources(File rootPath) throws IOException {
-        return reviewSources(rootPath.toPath());
+    public Qualifier analyzeCodebase(File rootPath) {
+        return analyzeCodebase(rootPath.toPath());
     }
     
-    public Qualifier reviewSources(Path rootPath) throws IOException {
+    public Qualifier analyzeCodebase(Path rootPath) {
         if (mode == Mode.ignore)
             return this;
         
@@ -133,6 +132,7 @@ public class Qualifier {
         case log:
             actions.addAll(logComponents(springComponentLocations));
             actions.addAll(logFields(autowiredFieldsLocations));
+            return this;
         
         case warnUnnamed:
         case warnNamed:
@@ -164,7 +164,7 @@ public class Qualifier {
         }
     }
     
-    public Qualifier executeActions() throws Exception{ 
+    public Qualifier applyActions() throws Exception{ 
         
         Map<String, TextFile> fileCache = new HashMap<>();
         
@@ -172,7 +172,9 @@ public class Qualifier {
         
         for (AbstractAction action: actions) {
             if (action != null)
-                action.setFileCache(fileCache).perform();
+                action
+                	.setFileCache(fileCache)
+                	.perform();
             
             failed = action instanceof ErrorAction || failed;
         }
@@ -243,28 +245,28 @@ public class Qualifier {
                 .collect(Collectors.toList());
     }
 
-    private List<AbstractAction> nameSpringComponents(List<ClassAnnotationLocation> springComponents, Map<String, String> beanNameMap) throws IOException {
+    private List<AbstractAction> nameSpringComponents(List<ClassAnnotationLocation> springComponents, Map<String, String> beanNameMap) {
         return springComponents.stream()
                     .map(component -> assignNameToSpringComponent(component, beanNameMap))
                     .filter(action -> action != null)
                     .collect(Collectors.toList());
     }
 
-    private List<AbstractAction> qualifyAutowiredFields(List<AutowiredFieldLocation> fields, Map<String, String> beanNameMap) throws IOException {
+    private List<AbstractAction> qualifyAutowiredFields(List<AutowiredFieldLocation> fields, Map<String, String> beanNameMap) {
         return fields.stream()
                     .map(field -> assignNameToAutowiredProperty(field, beanNameMap))
                     .filter(action -> action != null)
                     .collect(Collectors.toList());
     }
 
-    private static List<AbstractAction> unnameSpringComponents(List<ClassAnnotationLocation> springComponents) throws IOException {
+    private static List<AbstractAction> unnameSpringComponents(List<ClassAnnotationLocation> springComponents) {
         return springComponents.stream()
                     .map(component -> unnameSpringComponent(component))
                     .filter(a -> a != null)
                     .collect(Collectors.toList());
     }
 
-    private static List<AbstractAction> unqualifyAutowiredFields(List<AutowiredFieldLocation> fields) throws IOException {
+    private static List<AbstractAction> unqualifyAutowiredFields(List<AutowiredFieldLocation> fields) {
         return fields.stream()
                     .map(field -> unnameAutowiredProperty(field))
                     .filter(a -> a != null)
@@ -444,9 +446,9 @@ public class Qualifier {
         try {
             byte[] array = MessageDigest.getInstance("MD5").digest(str.getBytes());
             
-            StringBuffer sb = new StringBuffer();
-            for (int i = 0; i < array.length; ++i)
-                sb.append(Integer.toHexString((array[i] & 0xFF) | 0x100).substring(1, 3));
+            StringBuilder sb = new StringBuilder();
+            for (byte b: array)
+                sb.append(Integer.toHexString((b & 0xFF) | 0x100).substring(1, 3));
             
             return sb.toString();
         } catch (NoSuchAlgorithmException e) {

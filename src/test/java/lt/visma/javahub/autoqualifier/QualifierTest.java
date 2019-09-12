@@ -28,7 +28,7 @@ public class QualifierTest {
         
         List<AbstractAction> actions = new Qualifier()
             .setMode(Mode.log)
-            .reviewSources(where)
+            .analyzeCodebase(where)
             .getActions();
         
         assertEquals(3, actions.size());
@@ -50,7 +50,7 @@ public class QualifierTest {
         
         List<AbstractAction> actions = new Qualifier()
             .setMode(Mode.warnUnnamed)
-            .reviewSources(where)
+            .analyzeCodebase(where)
             .getActions();
         
         assertEquals(3, actions.size());
@@ -72,7 +72,7 @@ public class QualifierTest {
         
         List<AbstractAction> actions = new Qualifier()
             .setMode(Mode.errorNamed)
-            .reviewSources(where)
+            .analyzeCodebase(where)
             .getActions();
         
         assertEquals(2, actions.size());
@@ -93,7 +93,7 @@ public class QualifierTest {
         
         List<AbstractAction> actions = new Qualifier()
             .setMode(Mode.unname)
-            .reviewSources(where)
+            .analyzeCodebase(where)
             .getActions();
         
         assertEquals(2, actions.size());
@@ -114,7 +114,7 @@ public class QualifierTest {
         
         List<AbstractAction> actions = new Qualifier()
             .setMode(Mode.nameByClass)
-            .reviewSources(where)
+            .analyzeCodebase(where)
             .getActions();
         
         assertEquals(3, actions.size());

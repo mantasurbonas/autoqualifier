@@ -39,8 +39,8 @@ public class Main {
         
         new Qualifier()
                 .setMode(mode)
-                .reviewSources(sourcePath)
-                .executeActions();
+                .analyzeCodebase(sourcePath)
+                .applyActions();
     }
 
     private static void printUsage(String [] actualParams) {
